@@ -63,6 +63,11 @@ def read_text_files(directory: str) -> List[str]:
 def load_ghostbuster_data(data_dir: str = 'data/ghostbuster-data') -> Tuple[List[str], List[int]]:
     """
     Load ghostbuster dataset and create labels
+    Args:
+        data_dir: root directory of ghostbuster data
+    Returns:
+        texts: list of text samples
+        labels: list of labels (0 for human, 1 for LLM)
     """
     domains = ['essay', 'reuter', 'wp']
     all_texts = []
@@ -85,11 +90,21 @@ def load_ghostbuster_data(data_dir: str = 'data/ghostbuster-data') -> Tuple[List
         # Load LLM generated texts (label 1)
         for subdir in os.listdir(domain_path):
             subdir_path = os.path.join(domain_path, subdir)
-            if os.path.isdir(subdir_path) and subdir != 'human' and not subdir.startswith('.') and not subdir == 'logprobs':
+            # Skip human directory, hidden directories, logprobs directory, and prompt directory
+            if (os.path.isdir(subdir_path) and 
+                subdir != 'human' and 
+                not subdir.startswith('.') and 
+                not subdir == 'logprobs' and 
+                not subdir == 'prompt'):
                 llm_texts = read_text_files(subdir_path)
                 all_texts.extend(llm_texts)
                 all_labels.extend([1] * len(llm_texts))
                 print(f"Loaded {len(llm_texts)} LLM texts from {domain}/{subdir}")
+    
+    print(f"\nTotal dataset statistics:")
+    print(f"Total samples: {len(all_texts)}")
+    print(f"Human samples: {all_labels.count(0)}")
+    print(f"LLM samples: {all_labels.count(1)}")
     
     return all_texts, all_labels
 
