@@ -12,20 +12,32 @@ import random
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print(f"Using device: {device}")
 
-def load_json_file(file_path: str) -> List[str]:
+def load_json_file(file_path: str, is_generated: bool = False) -> List[str]:
     """
     Load text data from json file
+    Args:
+        file_path: path to the json file
+        is_generated: True if loading from generated directory, False if from human directory
     """
     texts = []
     try:
         with open(file_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
-            # Assuming each item in json has a 'text' field
-            for item in data:
-                if isinstance(item, dict) and 'text' in item:
-                    texts.append(item['text'])
+            
+            # Handle generated data format (single object with numbered inputs)
+            if is_generated and isinstance(data, dict) and 'output' in data:
+                for _, text in data['output'].items():
+                    if text and isinstance(text, str):
+                        texts.append(text.strip())
+            # Handle human data format (list of dictionaries)
+            elif isinstance(data, list):
+                for item in data:
+                    if isinstance(item, dict) and 'output' in item and item['output']:
+                        texts.append(item['output'].strip())
+                        
     except Exception as e:
         print(f"Error reading file {file_path}: {str(e)}")
+    
     return texts
 
 def load_chinese_data(data_dir: str = 'data/face2_zh_json', data_type: str = 'news') -> Tuple[List[str], List[int]]:
@@ -33,7 +45,7 @@ def load_chinese_data(data_dir: str = 'data/face2_zh_json', data_type: str = 'ne
     Load Chinese dataset for specified type (news, webnovel, or wiki)
     Args:
         data_dir: root directory of Chinese data
-        data_type: type of data to load (news, webnovel, or wiki)
+        data_type: type of data to load ('news', 'webnovel', or 'wiki')
     Returns:
         texts: list of text samples
         labels: list of labels (0 for human, 1 for LLM)
@@ -41,21 +53,34 @@ def load_chinese_data(data_dir: str = 'data/face2_zh_json', data_type: str = 'ne
     all_texts = []
     all_labels = []
     
+    # Handle different file naming patterns for different types
+    if data_type == 'webnovel':
+        human_filename = 'webnovel.json'
+        llm_filename = 'webnovel.qwen2-72b-base.json'
+    else:
+        # For 'news' and 'wiki', they follow the pattern with '-zh'
+        human_filename = f'{data_type}-zh.json'
+        llm_filename = f'{data_type}-zh.qwen2-72b-base.json'
+    
     # Load human texts (label 0)
-    human_file = os.path.join(data_dir, 'human/zh_unicode', f'{data_type}-zh.json')
+    human_file = os.path.join(data_dir, 'human/zh_unicode', human_filename)
     if os.path.exists(human_file):
-        human_texts = load_json_file(human_file)
+        human_texts = load_json_file(human_file, is_generated=False)  # Use both input and output
         all_texts.extend(human_texts)
         all_labels.extend([0] * len(human_texts))
         print(f"Loaded {len(human_texts)} human texts from {data_type}")
+    else:
+        print(f"Warning: Human file not found at {human_file}")
     
     # Load LLM generated texts (label 1)
-    llm_file = os.path.join(data_dir, 'generated/zh_qwen2', f'{data_type}-zh.qwen2-72b-base.json')
+    llm_file = os.path.join(data_dir, 'generated/zh_qwen2', llm_filename)
     if os.path.exists(llm_file):
-        llm_texts = load_json_file(llm_file)
+        llm_texts = load_json_file(llm_file, is_generated=True)  # Only use output field
         all_texts.extend(llm_texts)
         all_labels.extend([1] * len(llm_texts))
         print(f"Loaded {len(llm_texts)} LLM texts from {data_type}")
+    else:
+        print(f"Warning: LLM file not found at {llm_file}")
     
     print(f"\nTotal {data_type} dataset statistics:")
     print(f"Total samples: {len(all_texts)}")
